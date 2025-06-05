@@ -1,0 +1,25 @@
+services:
+  grafana-alloy:
+    image: grafana/alloy:latest
+    container_name: grafana-alloy
+    restart: unless-stopped
+    ports:
+      - "12345:12345"  # Port HTTP pour l'interface web
+    volumes:
+      - ./config:/etc/alloy:ro
+      - ./data/positions:/tmp/positions
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command:
+      - "run"
+      - "/etc/alloy/alloy.river"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/tmp/alloy-data"
+    environment:
+      - ALLOY_DEPLOY_MODE=docker
+    networks:
+      - app_network
+      
+networks:
+  app_network:
+    external: true

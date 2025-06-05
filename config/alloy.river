@@ -1,0 +1,91 @@
+
+// Découverte des conteneurs docker
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+// Relabeling et filtrage
+discovery.relabel "docker_relabel" {
+  targets = discovery.docker.containers.targets
+
+  // Extraire le nom du container
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "docker_logs" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.docker_relabel.output
+  refresh_interval = "5s"
+
+  forward_to = [loki.process.filter_logs.receiver]
+}
+
+loki.process "filter_logs" {
+  // Filtrer les logs contenant "Uptime-Kuma" dans le User Agent
+  stage.drop {
+    expression = "(?i).*Uptime-Kuma/.*"
+  }
+  forward_to = [loki.process.parser.receiver]
+}
+
+loki.process "parser" {
+  forward_to = [loki.write.loki_endpoint.receiver]
+
+  stage.regex {
+    expression = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}[+-]\\d{2}:\\d{2}) \\[(?P<channel>[^.]+)\\.(?P<level>[^\\]]+)\\] (?P<message>.*?) (?P<context>(?:\\{.*?\\}|\\[.*?\\]|)) (?P<extra>(?:\\{.*?\\}|\\[.*?\\]|))\\s*$"
+  }
+
+  stage.labels{
+    values = {
+      channel = "channel",
+      level = "level",
+    }
+  }
+}
+
+loki.write "loki_endpoint" {
+  endpoint {
+    url = "https://loki.pomelo-dev.fr/loki/api/v1/push"
+
+    headers = {
+      "X-Scope-OrgID" = "tenant_id", // Remplacez par l'ID du projet
+    }
+  }
+}
+
+
+prometheus.exporter.unix "local_system" {
+  // Collecteurs spécifiques
+  set_collectors = [
+    "cpu",
+    "cpufreq",
+    "meminfo",
+    "diskstats",
+    "filesystem",
+    "loadavg",
+    "netdev",
+    "hwmon",
+    "thermal_zone",
+  ]
+ }
+
+prometheus.scrape "scrape_metrics" {
+  targets         = prometheus.exporter.unix.local_system.targets
+  forward_to      = [prometheus.remote_write.metrics_service.receiver]
+  scrape_interval = "10s"
+}
+
+prometheus.remote_write "metrics_service" {
+    endpoint {
+        url = "https://prometheus.pomelo-dev.fr/api/v1/write"
+
+    headers = {
+      "X-Scope-OrgID" = "tenant_id", // Remplacez par l'ID du projet
+    }
+  }
+}
