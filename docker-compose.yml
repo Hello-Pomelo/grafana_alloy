@@ -18,8 +18,8 @@ services:
     environment:
       - ALLOY_DEPLOY_MODE=docker
     networks:
-      - app_network
+      - app-network
       
 networks:
-  app_network:
+  app-network:
     external: true
