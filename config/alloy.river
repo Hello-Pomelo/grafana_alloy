@@ -15,6 +15,13 @@ discovery.relabel "docker_relabel" {
     regex         = "/(.*)"
     target_label  = "container"
   }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = ".*-([^-]+)$"
+    target_label  = "environment"
+    replacement   = "${1}"
+  }
 }
 
 loki.source.docker "docker_logs" {
